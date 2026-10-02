@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>东区新生赛场务评分台</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  :root{--paper:#f3f0e8;--ink:#242421;--line:#737373;--aff:#315f6a;--neg:#8a4b37}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:"Arial Unicode MS","Microsoft YaHei",Arial,sans-serif}
+  header{display:flex;align-items:center;justify-content:space-between;gap:16px;max-width:1480px;margin:auto;padding:22px 22px 10px}
+  h1{margin:0;font-family:"Noto Serif SC","Songti SC",serif;font-size:clamp(1.45rem,2.8vw,2.2rem);font-weight:600;letter-spacing:.08em}
+  .home{color:var(--aff);text-decoration:none;border-bottom:1px solid currentColor;white-space:nowrap}
+  main{max-width:1480px;margin:auto;padding:0 22px 40px}
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;margin:15px 0 18px;border-bottom:1px solid #b3aa9b}
+  .tab{border:1px solid #b3aa9b;border-bottom:0;background:#eee9dc;color:#4d4a43;padding:10px 23px;font:inherit;cursor:pointer;border-radius:5px 5px 0 0}
+  .tab[aria-selected="true"]{background:white;color:var(--ink);font-weight:700}
+  .sheet{background:white;border:1px solid #b3aa9b;padding:clamp(14px,2vw,28px);box-shadow:0 10px 28px #302d2710}
+  .sheet[hidden]{display:none}
+  .scroll{overflow-x:auto}
+  table{border-collapse:collapse;table-layout:fixed;background:white;font-size:14px}
+  td,th{border:1px solid var(--line);height:37px;padding:0 5px;text-align:center;vertical-align:middle;font-weight:400}
+  th{font-weight:700}
+  .judge-table{min-width:1190px;width:100%}
+  .judge-table col.item{width:112px}.judge-table col.max{width:70px}.judge-table col.score{width:92px}.judge-table col.gap{width:23px}
+  .judge-table .gap-cell{border:0;background:white}
+  .team-head{height:55px;font-size:19px;font-weight:700}.team-head.aff{color:var(--aff)}.team-head.neg{color:var(--neg)}
+  .blocked{background:#434343;color:#434343}.blocked.is-light{color:white}
+  .blank-space{border:0;background:white}
+  .calc{background:#edf2f2;color:#244f58;font-weight:700;font-variant-numeric:tabular-nums}
+  .input-cell{padding:0;background:#fff}
+  .input-cell input{display:block;width:100%;height:36px;border:0;background:transparent;text-align:center;color:var(--ink);font:inherit;font-size:15px;outline:0}
+  .input-cell input:focus{box-shadow:inset 0 0 0 2px var(--aff);background:#f8fcfc}
+  .input-cell input::placeholder{color:#bbb}
+  .subtotal td,.subtotal th{height:48px}
+  .total td,.total th{height:50px}
+  .best-votes{width:min(750px,100%);margin-top:20px}
+  .best-votes th{background:#f4f1e9}
+  .best-votes .input-cell{width:90px}
+  .best-votes .speaker{width:170px}
+  .summary-table{width:min(940px,100%);min-width:690px;margin-bottom:28px}
+  .summary-table td,.summary-table th{height:42px}
+  .summary-table .name{font-size:13px;white-space:nowrap}
+  .summary-table .top{background:#edf2f2;font-weight:700}
+  .summary-table .label{width:90px;font-weight:700}
+  .summary-table .manual{width:170px}
+  .summary-table .manual input{height:41px}
+  .summary-table .winner{background:#e8efe9;font-weight:700}
+  .hint{margin:12px 0 0;color:#6b6559;font-size:13px;line-height:1.6}
+  @media(max-width:700px){header{padding:18px 14px 6px}main{padding:0 14px 24px}.sheet{padding:12px}}
+</style>
+</head>
+<body>
+<header><h1>场务评分台</h1><a class="home" href="index.html">返回首页</a></header>
+<main>
+  <div class="tabs" role="tablist" aria-label="评分工作表">
+    <button class="tab" role="tab" aria-selected="true" aria-controls="summary" id="tab-summary" data-tab="summary">综合</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="judge1" id="tab-judge1" data-tab="judge1">评委1</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="judge2" id="tab-judge2" data-tab="judge2">评委2</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="judge3" id="tab-judge3" data-tab="judge3">评委3</button>
+  </div>
+  <section class="sheet" role="tabpanel" id="summary" aria-labelledby="tab-summary"></section>
+  <section class="sheet" role="tabpanel" id="judge1" aria-labelledby="tab-judge1" hidden></section>
+  <section class="sheet" role="tabpanel" id="judge2" aria-labelledby="tab-judge2" hidden></section>
+  <section class="sheet" role="tabpanel" id="judge3" aria-labelledby="tab-judge3" hidden></section>
+</main>
+<script>
+(() => {
+  'use strict';
+  const storageKey='dongqu-stage-score-v1';
+  const names=['正方一辩','正方二辩','正方三辩','正方四辩','反方一辩','反方二辩','反方三辩','反方四辩'];
+  const items=['陈词1','接质1','质询1','陈词2','接质2','质询2','质询小结','自由辩论','结辩'];
+  const allowed={4:[0],5:[0],6:[3],7:[1],8:[1],9:[2],10:[2],11:[0,1,2,3],12:[3]};
+  const state={};
+  try{Object.assign(state,JSON.parse(localStorage.getItem(storageKey)||'{}'))}catch(e){}
+  const id=(j,cell)=>`j${j}-${cell}`;
+  const val=key=>state[key]??'';
+  const num=key=>{const s=String(val(key)).trim();return s!==''&&Number.isFinite(Number(s))?Number(s):0};
+  const set=(key,value)=>{state[key]=value;try{localStorage.setItem(storageKey,JSON.stringify(state))}catch(e){};calculate()};
+  const el=(tag,cls,text)=>{const x=document.createElement(tag);if(cls)x.className=cls;if(text!==undefined)x.textContent=text;return x};
+  const cell=(row,tag,cls,text,span)=>{const x=el(tag,cls,text);if(span)x.colSpan=span;row.append(x);return x};
+  const input=(row,key,kind,placeholder='')=>{
+    const td=cell(row,'td','input-cell');const x=el('input');x.value=val(key);x.placeholder=placeholder;
+    x.setAttribute('aria-label',kind+' '+key);
+    if(kind==='score'||kind==='ticket'){x.type='number';x.step='any';x.inputMode='decimal'}
+    x.addEventListener('input',()=>set(key,x.value));td.append(x);return td;
+  };
+  const bestVoteInput=(row,j,i)=>{
+    const key=id(j,'best'+i),td=cell(row,'td','input-cell'),x=el('input');
+    x.type='number';x.min='0';x.max='3';x.step='1';x.inputMode='numeric';x.value=val(key);
+    x.setAttribute('aria-label',`评委${j}投给${names[i]}的最佳辩手票数`);
+    x.addEventListener('input',()=>{
+      const raw=x.value.trim(),n=raw===''?0:Number(raw);
+      const other=names.reduce((sum,_,k)=>sum+(k===i?0:num(id(j,'best'+k))),0);
+      if(!Number.isInteger(n)||n<0||n>3||other+n>3){x.value=val(key);return}
+      set(key,raw);
+    });td.append(x);return td;
+  };
+  const result=(row,key,cls='calc',span)=>{const x=cell(row,'td',cls,'',span);x.dataset.result=key;return x};
+  function makeJudge(j){
+    const section=document.getElementById('judge'+j),scroll=el('div','scroll'),table=el('table','judge-table');
+    table.setAttribute('aria-label',`评委${j}评分单`);
+    const cols=el('colgroup');for(const c of ['item','max','score','score','score','score','gap','item','max','score','score','score','score'])cols.append(el('col',c));table.append(cols);
+    let tr=el('tr');cell(tr,'th','team-head aff','正方',6);cell(tr,'td','gap-cell');cell(tr,'th','team-head neg','反方',6);table.append(tr);
+    tr=el('tr');for(const title of ['项目','总分',...names.slice(0,4),'','项目','总分',...names.slice(4)])cell(tr,'th',title===''?'gap-cell':'',title);table.append(tr);
+    for(let rowNo=4;rowNo<=12;rowNo++){
+      tr=el('tr');for(const side of [0,1]){
+        cell(tr,'td','',items[rowNo-4]);cell(tr,'td','',rowNo===11?'5*4':'10');
+        for(let p=0;p<4;p++){
+          const col=(side===0?'DEFG':'KLMN')[p],key=id(j,col+rowNo);
+          if(allowed[rowNo].includes(p))input(tr,key,'score');
+          else cell(tr,'td','blocked'+(rowNo===4&&p===1?' is-light':''));
+        }
+        if(side===0)cell(tr,'td','gap-cell');
+      }table.append(tr);
+    }
+    tr=el('tr','subtotal');for(const side of [0,1]){
+      cell(tr,'th','','个人总分');cell(tr,'td','','25');
+      for(const col of side===0?'DEFG':'KLMN')result(tr,id(j,col+'13'));
+      if(side===0)cell(tr,'td','gap-cell');
+    }table.append(tr);
+    tr=el('tr','total');cell(tr,'th','','正方总分');cell(tr,'td','','100');result(tr,id(j,'D14'),'calc',4);cell(tr,'td','gap-cell');
+    cell(tr,'th','','反方总分');cell(tr,'td','','100');result(tr,id(j,'K14'),'calc',4);table.append(tr);
+    scroll.append(table);section.append(scroll);
+    const best=el('table','best-votes');best.setAttribute('aria-label',`评委${j}最佳辩手票`);
+    tr=el('tr');for(const title of ['正方辩手','票数','反方辩手','票数'])cell(tr,'th','',title);best.append(tr);
+    for(let p=0;p<4;p++){
+      tr=el('tr');cell(tr,'td','speaker',names[p]);bestVoteInput(tr,j,p);
+      cell(tr,'td','speaker',names[p+4]);bestVoteInput(tr,j,p+4);best.append(tr);
+    }
+    section.append(best);
+    const progress=el('p','hint');progress.append('最佳辩手票：');const count=el('strong');count.dataset.result=id(j,'bestCount');progress.append(count,' / 3（可重复投给同一位辩手）');section.append(progress);
+    const vote=el('p','hint');vote.append('分数票：');const strong=el('strong');strong.dataset.result=id(j,'H17');vote.append(strong);section.append(vote);
+    section.append(el('p','hint','白格手动输入；深灰格不计分。个人总分、队伍总分和分数票自动更新。'));
+  }
+  function makeSummary(){
+    const section=document.getElementById('summary'),scroll=el('div','scroll'),table=el('table','summary-table');table.setAttribute('aria-label','综合评分');
+    let tr=el('tr');cell(tr,'td','','',1);for(const name of names)cell(tr,'th','name',name);table.append(tr);
+    tr=el('tr');cell(tr,'td','label','票数');for(let i=0;i<8;i++)result(tr,'bestScore'+i);table.append(tr);
+    for(let rank=0;rank<4;rank++){tr=el('tr');cell(tr,'td','label',rank===0?'票数排名':'');result(tr,'best'+rank,'top');cell(tr,'td','blank-space','',7);table.append(tr)}
+    scroll.append(table);
+    const bestResult=el('p','hint');bestResult.append('最佳辩手：');const name=el('strong');name.dataset.result='bestWinner';bestResult.append(name);section.append(bestResult);
+    const votes=el('table','summary-table');votes.style.maxWidth='470px';
+    tr=el('tr');cell(tr,'td','label');cell(tr,'th','','正方');cell(tr,'th','','反方');votes.append(tr);
+    for(const [row,label] of [[9,'印象'],[10,'分数'],[11,'总结'],[12,'最终']]){
+      tr=el('tr');cell(tr,'td','label',label);
+      for(const side of ['B','C']){
+        if(row===9||row===11)input(tr,side+row,'ticket');
+        else result(tr,side+row,row===12?'winner':'calc');
+      }votes.append(tr);
+    }
+    section.append(scroll,votes,el('p','hint','印象票、总结票手动输入；分数票由三个评委的队伍总分比较得出。每位评委有三张最佳辩手票，可重复投给同一位辩手。'));
+  }
+  function put(key,value){document.querySelectorAll('[data-result="'+key+'"]').forEach(x=>x.textContent=String(value))}
+  function calculate(){
+    const totals=[];
+    for(let j=1;j<=3;j++){
+      for(const side of ['DEFG','KLMN']){
+        for(const col of side){
+          const rows=col==='D'||col==='K'?[4,5,11]:col==='E'||col==='L'?[7,8,11]:col==='F'||col==='M'?[9,10,11]:[6,11,12];
+          const score=rows.reduce((sum,r)=>sum+num(id(j,col+r)),0);put(id(j,col+'13'),score);
+        }
+      }
+      // 对应工作簿 D14/K14 的 SUM 参数，逐项保持相同范围。
+      const teamCols=[['D','E','F','G'],['K','L','M','N']];
+      const team=teamCols.map(cols=>{
+        const [a,b,c,d]=cols;
+        return [4,5].reduce((s,r)=>s+num(id(j,a+r)),0)
+          +[7,8].reduce((s,r)=>s+num(id(j,b+r)),0)
+          +[9,10].reduce((s,r)=>s+num(id(j,c+r)),0)
+          +num(id(j,d+'6'))+cols.reduce((s,col)=>s+num(id(j,col+'11')),0)+num(id(j,d+'12'));
+      });
+      put(id(j,'D14'),team[0]);put(id(j,'K14'),team[1]);
+      const vote=team[0]>team[1]?'正方':team[0]<team[1]?'反方':'平局';put(id(j,'H17'),vote);totals.push(vote);
+    }
+    const scores=names.map((_,i)=>[1,2,3].reduce((sum,j)=>sum+num(id(j,'best'+i)),0));
+    const voteCounts=[1,2,3].map(j=>names.reduce((sum,_,i)=>sum+num(id(j,'best'+i)),0));
+    voteCounts.forEach((count,i)=>put(id(i+1,'bestCount'),count));
+    scores.forEach((score,i)=>put('bestScore'+i,score));
+    const order=names.map((_,i)=>i).sort((a,b)=>scores[b]-scores[a]||a-b);
+    for(let i=0;i<4;i++)put('best'+i,scores[order[i]]>0?names[order[i]]:'');
+    const top=Math.max(...scores),leaders=names.filter((_,i)=>scores[i]===top);
+    put('bestWinner',voteCounts.every(n=>n===3)?(leaders.length===1?leaders[0]:'并列：'+leaders.join('、')+'（待确定）'):'待三位评委各投满 3 票');
+    const positive=totals.filter(x=>x==='正方').length,negative=totals.filter(x=>x==='反方').length;
+    put('B10',positive);put('C10',negative);
+    put('B12',num('B9')+positive+num('B11'));
+    put('C12',num('C9')+negative+num('C11'));
+  }
+  makeSummary();for(let j=1;j<=3;j++)makeJudge(j);calculate();
+  document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.setAttribute('aria-selected',String(x===tab)));
+    document.querySelectorAll('.sheet').forEach(x=>x.hidden=x.id!==tab.dataset.tab);
+  }));
+})();
+</script>
+</body>
+</html>
