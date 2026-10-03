@@ -149,11 +149,11 @@
         else result(tr,side+row,row===12?'winner':'calc');
       }votes.append(tr);
     }
-    section.append(scroll,votes,el('p','hint','印象票、总结票手动输入；分数票由三个评委的队伍总分比较得出。每位评委有三张最佳辩手票，可重复投给同一位辩手。'));
+    section.append(scroll,votes,el('p','hint','印象票、总结票手动输入；分数票由三个评委的队伍总分比较得出。非零平局时双方各得 0.5 票，双方均为 0 分时各得 0 票。每位评委有三张最佳辩手票，可重复投给同一位辩手。'));
   }
   function put(key,value){document.querySelectorAll('[data-result="'+key+'"]').forEach(x=>x.textContent=String(value))}
   function calculate(){
-    const totals=[];
+    const scoreVotes=[];
     for(let j=1;j<=3;j++){
       for(const side of ['DEFG','KLMN']){
         for(const col of side){
@@ -171,7 +171,9 @@
           +num(id(j,d+'6'))+cols.reduce((s,col)=>s+num(id(j,col+'11')),0)+num(id(j,d+'12'));
       });
       put(id(j,'D14'),team[0]);put(id(j,'K14'),team[1]);
-      const vote=team[0]>team[1]?'正方':team[0]<team[1]?'反方':'平局';put(id(j,'H17'),vote);totals.push(vote);
+      const vote=team[0]>team[1]?'正方':team[0]<team[1]?'反方':'平局';put(id(j,'H17'),vote);
+      const tied=team[0]===team[1]&&team[0]!==0;
+      scoreVotes.push([team[0]>team[1]?1:tied?0.5:0,team[1]>team[0]?1:tied?0.5:0]);
     }
     const scores=names.map((_,i)=>[1,2,3].reduce((sum,j)=>sum+num(id(j,'best'+i)),0));
     const voteCounts=[1,2,3].map(j=>names.reduce((sum,_,i)=>sum+num(id(j,'best'+i)),0));
@@ -181,7 +183,7 @@
     for(let i=0;i<4;i++)put('best'+i,scores[order[i]]>0?names[order[i]]:'');
     const top=Math.max(...scores),leaders=names.filter((_,i)=>scores[i]===top);
     put('bestWinner',voteCounts.every(n=>n===3)?(leaders.length===1?leaders[0]:'并列：'+leaders.join('、')+'（待确定）'):'待三位评委各投满 3 票');
-    const positive=totals.filter(x=>x==='正方').length,negative=totals.filter(x=>x==='反方').length;
+    const positive=scoreVotes.reduce((sum,pair)=>sum+pair[0],0),negative=scoreVotes.reduce((sum,pair)=>sum+pair[1],0);
     put('B10',positive);put('C10',negative);
     put('B12',num('B9')+positive+num('B11'));
     put('C12',num('C9')+negative+num('C11'));
